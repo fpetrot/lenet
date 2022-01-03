@@ -63,6 +63,8 @@ if True:
     f = open(f'{rep}_parameters.h', 'wt')
     if rep == 'int8_t':
         f.write('#include <inttypes.h>\n')
+        f.write('typedef struct int32_8_t {\n  uint32_t mult;\n  uint8_t shift;\n} int32_8_t;\n')
+
     # Gives the tensors in what seems to be the correct order, alleluhia!
     ops = interpreter._get_ops_details()
     for op_index, op in enumerate(ops):
@@ -84,8 +86,8 @@ if True:
             # Biases do not need adjustments, this is done in the preceeding conv2d
             if rep == 'int8_t' and layer_name[2] != 'BiasAdd':
                 t = "/* Quantization:\n  " +  str(layer['quantization_parameters']) + "\n*/\n"
-                t += rep + ' ' + layer_name[1]
-                t += f"_scales[{len(layer['quantization_parameters']['scales'])}][2]"
+                t += 'int32_8_t ' + layer_name[1]
+                t += f"_scales[{len(layer['quantization_parameters']['scales'])}]"
                 t += " = {\n"
                 for scale in layer['quantization_parameters']['scales']:
                     t += '  {' + str(mult_to_fix_shift(scale)).strip('()') + '},'
@@ -99,7 +101,10 @@ if True:
             else:
                 t = ""
             layer_shape = re.sub(' +', '][', re.sub('\[ +', '[', f'{layer["shape"]}'))
-            t += f'{rep} {layer_name[1]}_{wtype}' + f'{layer_shape} =\n'
+            if rep == 'int8_t' and layer_name[2] == 'BiasAdd':
+                t += f'int16_t {layer_name[1]}_{wtype}' + f'{layer_shape} =\n'
+            else:
+                t += f'{rep} {layer_name[1]}_{wtype}' + f'{layer_shape} =\n'
             s = np.array2string(interpreter.get_tensor(layer_idx), 80, separator=',')
             s = s.replace('[', '{')
             s = s.replace(']', '}')
