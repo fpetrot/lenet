@@ -89,37 +89,18 @@ void conv2d(int in_channels, int out_channels,
 {
     int fm_size = img_size - 2 * (kernel_size / 2) + !(kernel_size & 1);
 
-    /*
-     * We must zero the output values before entering the outer loop as values
-     * are supposed to accumulate.
-     */
-    for (int o = 0; o < out_channels; o++) {
-        for (int k = 0; k < fm_size; k++) {
-            for (int l = 0; l < fm_size; l++) {
-                output[k][l][o] = 0.0;
-            }
-        }
-    }
-
-    for (int o = 0; o < out_channels; o++) {
-        for (int i = 0; i < in_channels; i++) {
-            for (int k = 0; k < fm_size; k++) {
-                for (int l = 0; l < fm_size; l++) {
-                    for (int m = 0; m < kernel_size; m++) {
-                        for (int n = 0; n < kernel_size; n++) {
-                            output[k][l][o] += kernel[o][m][n][i] * input[k + m][l + n][i];
+    for (int k = 0; k < fm_size; k++) {
+        for (int l = 0; l < fm_size; l++) {
+            for (int o = 0; o < out_channels; o++) {
+                double accu = 0;
+                for (int m = 0; m < kernel_size; m++) {
+                    for (int n = 0; n < kernel_size; n++) {
+                        for (int i = 0; i < in_channels; i++) {
+                            accu += kernel[o][m][n][i] * input[k + m][l + n][i];
                         }
                     }
                 }
-            }
-        }
-    }
-
-    /* Apply bias and relu on all output channels */
-    for (int o = 0; o < out_channels; o++) {
-        for (int k = 0; k < fm_size; k++) {
-            for (int l = 0; l < fm_size; l++) {
-                output[k][l][o] = relu(output[k][l][o] + bias[o]);
+                output[k][l][o] = relu(accu + bias[o]);
             }
         }
     }
@@ -185,7 +166,7 @@ int main(void)
     /* Input image 32x32, output image 28x28 */
     double c1_out[28][28][6];
     conv2d(1, 6, 32, 5, test_mnist[0], C1_kernels, C1_biases, c1_out);
-#if 0
+#if 1
     dump_tensor(6, 28, c1_out);
     exit(0);
 #endif
