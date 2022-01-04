@@ -89,7 +89,6 @@ static inline int8_t relu(int32_t a)
 void conv2d(int in_channels, int out_channels,
             int img_size, int kernel_size,
             int8_t input[img_size][img_size][in_channels],
-            int8_t input_offset[in_channels],
             int8_t kernel[out_channels][kernel_size][kernel_size][in_channels],
             int16_t bias[out_channels],
             int8_t output[img_size - 2 * (kernel_size / 2) + !(kernel_size & 1)]
@@ -105,13 +104,11 @@ void conv2d(int in_channels, int out_channels,
                 for (int m = 0; m < kernel_size; m++) {
                     for (int n = 0; n < kernel_size; n++) {
                         for (int i = 0; i < in_channels; i++) {
-                            accu += kernel[o][m][n][i]
-                                    * (input[k + m][l + n][i] + input_offset[i]);
+                            accu += kernel[o][m][n][i] * input[k + m][l + n][i];
                         }
                     }
                 }
                 accu += bias[o];
-                accu = (accu * output_scale) >> output_shift;
                 output[k][l][o] = relu(accu);
             }
         }
@@ -161,7 +158,7 @@ void dense(int inputs,
            int outputs,
            int8_t input[inputs],
            int8_t weight[outputs][inputs],
-           int8_t bias[outputs],
+           int16_t bias[outputs],
            int8_t output[outputs])
 {
     for (int j = 0; j < outputs; j ++) {
@@ -176,7 +173,6 @@ void dense(int inputs,
 int main(void)
 {
     int8_t c1_in[32][32];
-    quantize(
     /* Input image 32x32, output image 28x28 */
     int8_t c1_out[28][28][6];
     conv2d(1, 6, 32, 5, test_mnist[0], C1_kernels, C1_biases, c1_out);
