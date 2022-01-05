@@ -120,7 +120,7 @@ if True:
 
             if rep == 'int8_t' and (op['op_name'] == 'CONV_2D' or op['op_name'] == 'FULLY_CONNECTED'):
                 if input_idx == 0: # Zero point to be applied on input data
-                    u = f"_zero_points[{len(layer['quantization_parameters']['zero_points'])}]" + " = {\n  "
+                    u = f"_zero_points_in[{len(layer['quantization_parameters']['zero_points'])}]" + " = {\n  "
                     for zp in layer['quantization_parameters']['zero_points']:
                         u += str(zp) + ','
                     u += '\n};\n'
@@ -142,11 +142,17 @@ if True:
 
         if rep == 'int8_t' and (op['op_name'] == 'CONV_2D' or op['op_name'] == 'FULLY_CONNECTED'):
             layer = interpreter._get_tensor_details(op['outputs'])
+            # Dump scale as input_scale0 * input_scale1 / output_scale
             scales_out = layer['quantization_parameters']['scales']
             scales_out = np.divide(scales_in, scales_out)
             t += f'int32_8_t {layer_name[1]}_m0_s[{len(scales_out)}]' + '= {\n'
             for scale in scales_out:
                 t += '  {' + str(mult_to_fix_shift(scale)).strip('()') + '},'
+            t += '\n};\n'
+            # Dump output zero points
+            t += f"int8_t {layer_name[1]}_zero_points_out[{len(layer['quantization_parameters']['zero_points'])}]" + " = {\n  "
+            for zp in layer['quantization_parameters']['zero_points']:
+                t += str(zp) + ','
             t += '\n};\n'
         f.write(t)
     f.close()
