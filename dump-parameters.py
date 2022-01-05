@@ -23,8 +23,8 @@ else:
     print(f'Usage {sys.argv[0]} (float|int8_t)')
     sys.exit(1)
 
-# Find a fixed point multiplication 
-# Monkey-type translation from tensorflow gemmlowp pipeline 
+# Find a fixed point multiplication
+# Monkey-type translation from tensorflow gemmlowp pipeline
 def mult_to_fix_shift(multiplicand):
     assert multiplicand > 0.0, "Multiplicand must be positive"
     assert multiplicand < 1.0, "Multiplicand must be strictly less than 1"
@@ -52,12 +52,43 @@ test_images = np.expand_dims(test_images, axis=-1)
 test_images = test_images[2:test_images.shape[0] - 2]
 '''
 
-model_filename = f'lenet5_models/model_{rep}.tflite' 
+model_filename = f'lenet5_models/model_{rep}.tflite'
 interpreter = tf.lite.Interpreter(model_path = model_filename)
 interpreter.allocate_tensors()
 
 # Dump the whole content of a numpy array
 np.set_printoptions(threshold = np.inf)
+
+# Dumps the whole stuff in sequential order
+# For debug and understanding
+if False:
+    # Gives the tensors in what seems to be the correct order, alleluhia!
+    ops = interpreter._get_ops_details()
+    for op in ops:
+        print(op)
+        index = 0
+        for layer_idx in op['inputs']:
+            layer = interpreter._get_tensor_details(layer_idx)
+            scales_in = layer['quantization_parameters']['scales']
+            print(f'Input[{index}] ', layer['name'], layer['quantization_parameters']['scales'])
+            # print("//Index ", str(layer['index']))
+            # print("// Name ", layer['name'])
+            # print("// Shape ", layer['shape'])
+            # print("// Quantization ", layer['quantization_parameters'])
+            # print("// Tensor ")
+            # s = np.array2string(interpreter.get_tensor(layer['index']), 80, separator=',')
+            # s = s.replace('[', '{')
+            # s = s.replace(']', '}')
+            # print(s + ';')
+            index += 1
+        for layer_idx in op['outputs']:
+            layer = interpreter._get_tensor_details(layer_idx)
+            scales_out = layer['quantization_parameters']['scales']
+            print('Output[0] ', layer['name'], layer['quantization_parameters']['scales'])
+
+        print("@@@@ ", np.divide(scales_in, scales_out))
+
+    sys.exit(0)
 
 if True:
     f = open(f'{rep}_parameters.h', 'wt')
@@ -67,63 +98,58 @@ if True:
 
     # Gives the tensors in what seems to be the correct order, alleluhia!
     ops = interpreter._get_ops_details()
-    for op_index, op in enumerate(ops):
-        for layer_idx in op['inputs']:
+    for op in ops:
+        t = ""
+        for input_idx, layer_idx in enumerate(op['inputs']):
             layer = interpreter._get_tensor_details(layer_idx)
             # Seems to me that some 'layers' are intermediate results not needed yet
-            if not re.match(r'sequential', layer['name']) or ';' in layer['name'] or 'Pool' in layer['name']:
-                continue
+            # Legacy for float
+            if rep == 'float':
+                if not re.match(r'sequential', layer['name']) or ';' in layer['name'] or 'Pool' in layer['name']:
+                    continue
+
+            wtype = ''
             layer_name = layer["name"].split('/')
-            if layer_name[2] == 'Conv2D':
-                wtype = 'kernels'
-            elif layer_name[2] == 'BiasAdd':
-                wtype = 'biases'
-            elif layer_name[2] == 'MatMul':
-                wtype = 'weights'
-            else :
-                continue
+            if len(layer_name) > 1:
+                if layer_name[2] == 'Conv2D':
+                    wtype = 'kernels'
+                elif layer_name[2] == 'BiasAdd':
+                    wtype = 'biases'
+                elif layer_name[2] == 'MatMul':
+                    wtype = 'weights'
 
-            # Biases do not need adjustments, this is done in the preceeding conv2d
-            if rep == 'int8_t' and layer_name[2] != 'BiasAdd':
-                t = "/* Quantization:\n  " +  str(layer['quantization_parameters']) + "\n*/\n"
-                t += 'int32_8_t ' + layer_name[1]
-                t += f"_scales[{len(layer['quantization_parameters']['scales'])}]"
-                t += " = {\n"
-                for scale in layer['quantization_parameters']['scales']:
-                    t += '  {' + str(mult_to_fix_shift(scale)).strip('()') + '},'
-                t += '\n};\n'
-                t += rep + ' ' + layer_name[1]
-                t += f"_zero_points[{len(layer['quantization_parameters']['zero_points'])}]"
-                t += " = {\n  "
-                for zp in layer['quantization_parameters']['zero_points']:
-                    t += str(zp) + ','
-                t += '\n};\n'
-            else:
-                t = ""
-            layer_shape = re.sub(' +', '][', re.sub('\[ +', '[', f'{layer["shape"]}'))
-            if rep == 'int8_t' and layer_name[2] == 'BiasAdd':
-                t += f'int16_t {layer_name[1]}_{wtype}' + f'{layer_shape} =\n'
-            else:
-                t += f'{rep} {layer_name[1]}_{wtype}' + f'{layer_shape} =\n'
-            s = np.array2string(interpreter.get_tensor(layer_idx), 80, separator=',')
-            s = s.replace('[', '{')
-            s = s.replace(']', '}')
-            t += s + ';\n'
-            f.write(t)
+            if rep == 'int8_t' and (op['op_name'] == 'CONV_2D' or op['op_name'] == 'FULLY_CONNECTED'):
+                if input_idx == 0: # Zero point to be applied on input data
+                    u = f"_zero_points[{len(layer['quantization_parameters']['zero_points'])}]" + " = {\n  "
+                    for zp in layer['quantization_parameters']['zero_points']:
+                        u += str(zp) + ','
+                    u += '\n};\n'
+                elif input_idx == 1: # Weights, they have the proper name to dump the zero points
+                    t += f'int8_t {layer_name[1]}' + u
+                elif input_idx == 2: # Bias, as it contains the product of the input scales
+                    scales_in = layer['quantization_parameters']['scales']
+
+            if wtype != '':
+                layer_shape = re.sub(' +', '][', re.sub('\[ +', '[', f'{layer["shape"]}'))
+                if rep == 'int8_t' and layer_name[2] == 'BiasAdd':
+                    t += f'int16_t {layer_name[1]}_{wtype}' + f'{layer_shape} =\n'
+                else:
+                    t += f'{rep} {layer_name[1]}_{wtype}' + f'{layer_shape} =\n'
+                s = np.array2string(interpreter.get_tensor(layer_idx), 80, separator=',')
+                s = s.replace('[', '{')
+                s = s.replace(']', '}')
+                t += s + ';\n'
+
+        if rep == 'int8_t' and (op['op_name'] == 'CONV_2D' or op['op_name'] == 'FULLY_CONNECTED'):
+            layer = interpreter._get_tensor_details(op['outputs'])
+            scales_out = layer['quantization_parameters']['scales']
+            scales_out = np.divide(scales_in, scales_out)
+            t += f'int32_8_t {layer_name[1]}_m0_s[{len(scales_out)}]' + '= {\n'
+            for scale in scales_out:
+                t += '  {' + str(mult_to_fix_shift(scale)).strip('()') + '},'
+            t += '\n};\n'
+        f.write(t)
     f.close()
-
-if False:
-    all_layers_details = interpreter.get_tensor_details() 
-    for layer in all_layers_details:
-        print("//Index ", str(layer['index']))
-        print("// Name ", layer['name'])
-        print("// Shape ", layer['shape'])
-        print("// Quantization ", layer['quantization_parameters'])
-        print("// Tensor ")
-        s = np.array2string(interpreter.get_tensor(layer['index']), 80, separator=',')
-        s = s.replace('[', '{')
-        s = s.replace(']', '}')
-        print(s + ';')
 
 # Change this to test a different image
 test_image_index = 2
@@ -138,22 +164,22 @@ def run_tflite_model(tflite_file, test_image_indices):
 
     input_details = interpreter.get_input_details()[0]
     output_details = interpreter.get_output_details()[0]
-   
+
     predictions = np.zeros((len(test_image_indices),), dtype=int)
     for i, test_image_index in enumerate(test_image_indices):
         test_image = test_images[test_image_index]
         test_label = test_labels[test_image_index]
-        
+
         # Check if the input type is quantized, then rescale input data to uint8
         if input_details['dtype'] == np.uint8:
             input_scale, input_zero_point = input_details['quantization']
             test_image = test_image / input_scale + input_zero_point
-        
+
         test_image = np.expand_dims(test_image, axis=0).astype(input_details['dtype'])
         interpreter.set_tensor(input_details['index'], test_image)
         interpreter.invoke()
         output = interpreter.get_tensor(output_details['index'])[0]
-        
+
         predictions[i] = output.argmax()
 
     return predictions
@@ -188,7 +214,7 @@ def evaluate_model(tflite_file):
 
 if False:
     test_model(f"lenet5_models/model_{rep}.tflite", test_image_index)
-    all_layers_details = interpreter.get_tensor_details() 
+    all_layers_details = interpreter.get_tensor_details()
     for layer in all_layers_details:
         print("//Index ", str(layer['index']))
         print("// Name ", layer['name'])
