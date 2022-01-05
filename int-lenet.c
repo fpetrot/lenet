@@ -89,11 +89,14 @@ static inline int8_t relu(int32_t a)
 void conv2d(int in_channels, int out_channels,
             int img_size, int kernel_size,
             int8_t input[img_size][img_size][in_channels],
+            int8_t input_zp,
             int8_t kernel[out_channels][kernel_size][kernel_size][in_channels],
             int16_t bias[out_channels],
+            int32_8_t m0_s[out_channels],
             int8_t output[img_size - 2 * (kernel_size / 2) + !(kernel_size & 1)]
                          [img_size - 2 * (kernel_size / 2) + !(kernel_size & 1)]
-                         [out_channels])
+                         [out_channels],
+            int8_t output_zp)
 {
     int fm_size = img_size - 2 * (kernel_size / 2) + !(kernel_size & 1);
 
@@ -104,11 +107,13 @@ void conv2d(int in_channels, int out_channels,
                 for (int m = 0; m < kernel_size; m++) {
                     for (int n = 0; n < kernel_size; n++) {
                         for (int i = 0; i < in_channels; i++) {
-                            accu += kernel[o][m][n][i] * input[k + m][l + n][i];
+                            accu += kernel[o][m][n][i]
+                                    * (input[k + m][l + n][i] - input_zp);
                         }
                     }
                 }
                 accu += bias[o];
+                accu = output_zp + (accu * m0_s[o].mult) >> m0_s[o].shift;
                 output[k][l][o] = relu(accu);
             }
         }
@@ -157,25 +162,34 @@ void reshape(int channels,
 void dense(int inputs,
            int outputs,
            int8_t input[inputs],
+           int8_t input_zp,
            int8_t weight[outputs][inputs],
            int16_t bias[outputs],
-           int8_t output[outputs])
+           int32_8_t m0_s,
+           int8_t output[outputs],
+           int8_t output_zp)
 {
     for (int j = 0; j < outputs; j ++) {
+        int32_t accu = 0;
         for (int i = 0; i < inputs; i ++) {
-            output[j] += input[i] * weight[j][i];
+            accu += (input[i] - input_zp) * weight[j][i];
         }
-        output[j] = relu(output[j] + bias[j]);
+        accu += bias[j];
+        accu = output_zp + (accu * m0_s.mult) >> m0_s.shift;
+        accu += output_zp;
+        output[j] = relu(accu);
     }
 }
-
 
 int main(void)
 {
     int8_t c1_in[32][32];
     /* Input image 32x32, output image 28x28 */
     int8_t c1_out[28][28][6];
-    conv2d(1, 6, 32, 5, test_mnist[0], C1_kernels, C1_biases, c1_out);
+    conv2d(1, 6, 32, 5,
+           test_mnist[0], C1_zero_points_in[0],
+           C1_kernels, C1_biases, C1_m0_s,
+           c1_out, C1_zero_points_out[0]);
 #if 0
     dump_tensor(6, 28, c1_out);
     exit(0);
@@ -187,7 +201,9 @@ int main(void)
     exit(0);
 #endif
     int8_t c3_out[10][10][16];
-    conv2d(6, 16, 14, 5, s2_out, C3_kernels, C3_biases, c3_out);
+    conv2d(6, 16, 14, 5, s2_out, C3_zero_points_in[0],
+           C3_kernels, C3_biases, C3_m0_s,
+           c3_out, C3_zero_points_out[0]);
 #if 0
     dump_tensor(16, 10, c3_out);
     exit(0);
@@ -205,19 +221,28 @@ int main(void)
     exit(0);
 #endif
     int8_t f5_out[120];
-    dense(400, 120, r_out, F5_weights, F5_biases, f5_out);
+    dense(400, 120,
+          r_out, F5_zero_points_in[0],
+          F5_weights, F5_biases, F5_m0_s[0],
+          f5_out, F5_zero_points_out[0]);
 #if 0
     dump_dense(120, f5_out);
     exit(0);
 #endif
     int8_t f6_out[84];
-    dense(120, 84, f5_out, F6_weights, F6_biases, f6_out);
+    dense(120, 84,
+          f5_out, F6_zero_points_in[0],
+          F6_weights, F6_biases, F6_m0_s[0],
+          f6_out, F6_zero_points_out[0]);
 #if 0
     dump_dense(84, f6_out);
     exit(0);
 #endif
     int8_t f7_out[10];
-    dense(84, 10, f6_out, F7_weights, F7_biases, f7_out);
+    dense(84, 10,
+          f6_out, F7_zero_points_in[0],
+          F7_weights, F7_biases, F7_m0_s[0],
+          f7_out, F7_zero_points_out[0]);
 #if 0
     dump_dense(10, f7_out);
     exit(0);
