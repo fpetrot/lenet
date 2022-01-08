@@ -119,6 +119,7 @@ if True:
                     wtype = 'weights'
 
             if rep == 'int8_t' and (op['op_name'] == 'CONV_2D' or op['op_name'] == 'FULLY_CONNECTED'):
+                t += f"/* Quantization parameters: Input[{input_idx}]\n  " + str(layer['quantization_parameters']) + "\n */\n"
                 if input_idx == 0: # Zero point to be applied on input data
                     u = f"_zero_points_in[{len(layer['quantization_parameters']['zero_points'])}]" + " = {\n  "
                     for zp in layer['quantization_parameters']['zero_points']:
@@ -142,6 +143,7 @@ if True:
 
         if rep == 'int8_t' and (op['op_name'] == 'CONV_2D' or op['op_name'] == 'FULLY_CONNECTED'):
             layer = interpreter._get_tensor_details(op['outputs'])
+            t += "/* Quantization parameters: Output[0]\n  " + str(layer['quantization_parameters']) + "\n */\n"
             # Dump scale as input_scale0 * input_scale1 / output_scale
             scales_out = layer['quantization_parameters']['scales']
             scales_out = np.divide(scales_in, scales_out)
