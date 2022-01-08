@@ -92,15 +92,15 @@ void conv2d(int in_channels, int out_channels,
     for (int k = 0; k < fm_size; k++) {
         for (int l = 0; l < fm_size; l++) {
             for (int o = 0; o < out_channels; o++) {
-                float accu = 0;
+                float mac = 0;
                 for (int m = 0; m < kernel_size; m++) {
                     for (int n = 0; n < kernel_size; n++) {
                         for (int i = 0; i < in_channels; i++) {
-                            accu += kernel[o][m][n][i] * input[k + m][l + n][i];
+                            mac += kernel[o][m][n][i] * input[k + m][l + n][i];
                         }
                     }
                 }
-                output[k][l][o] = relu(accu + bias[o]);
+                output[k][l][o] = relu(mac + bias[o]);
             }
         }
     }
@@ -161,12 +161,14 @@ void dense(int inputs,
 }
 
 
-int main(void)
+int main(int argc, char *argv[])
 {
+    int i = strtol(argv[1], NULL, 0);
+
     /* Input image 32x32, output image 28x28 */
     float c1_out[28][28][6];
-    conv2d(1, 6, 32, 5, test_mnist[0], C1_kernels, C1_biases, c1_out);
-#if 0
+    conv2d(1, 6, 32, 5, test_mnist[i], C1_kernels, C1_biases, c1_out);
+#if 1
     dump_tensor(6, 28, c1_out);
     exit(0);
 #endif

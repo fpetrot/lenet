@@ -70,9 +70,10 @@ static inline int8_t max(int8_t a, int8_t b)
     return a > b ? a : b;
 }
 
+/* This just don't work, as all intermediate results are over 127 */
 static inline int8_t relu(int32_t a)
 {
-    return a < 0 ? 0 : a;
+    return a < 0 ? 0 : a > 127 ? 127 : a;
 }
 
 /*
@@ -103,18 +104,19 @@ void conv2d(int in_channels, int out_channels,
     for (int k = 0; k < fm_size; k++) {
         for (int l = 0; l < fm_size; l++) {
             for (int o = 0; o < out_channels; o++) {
-                int32_t accu = 0;
+                int32_t mac = 0;
                 for (int m = 0; m < kernel_size; m++) {
                     for (int n = 0; n < kernel_size; n++) {
                         for (int i = 0; i < in_channels; i++) {
-                            accu += kernel[o][m][n][i]
-                                    * (input[k + m][l + n][i] - input_zp);
+                            mac += kernel[o][m][n][i]
+                                    * (input[k + m][l + n][i] + input_zp);
                         }
                     }
                 }
-                accu += bias[o];
-                accu = output_zp + (accu * m0_s[o].mult) >> m0_s[o].shift;
-                output[k][l][o] = relu(accu);
+                mac += bias[o];
+                mac = ((mac * m0_s[o].mult) >> m0_s[o].shift);
+                mac += output_zp;
+                output[k][l][o] = relu(mac);
             }
         }
     }
@@ -170,27 +172,29 @@ void dense(int inputs,
            int8_t output_zp)
 {
     for (int j = 0; j < outputs; j ++) {
-        int32_t accu = 0;
+        int32_t mac = 0;
         for (int i = 0; i < inputs; i ++) {
-            accu += (input[i] - input_zp) * weight[j][i];
+            mac += (input[i] + input_zp) * weight[j][i];
         }
-        accu += bias[j];
-        accu = output_zp + (accu * m0_s.mult) >> m0_s.shift;
-        accu += output_zp;
-        output[j] = relu(accu);
+        mac += bias[j];
+        mac = (mac * m0_s.mult) >> m0_s.shift;
+        mac += output_zp;
+        output[j] = relu(mac);
     }
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
+    int i = strtol(argv[1], NULL, 0);
+
     int8_t c1_in[32][32];
     /* Input image 32x32, output image 28x28 */
     int8_t c1_out[28][28][6];
     conv2d(1, 6, 32, 5,
-           test_mnist[0], C1_zero_points_in[0],
+           test_mnist[i], C1_zero_points_in[0],
            C1_kernels, C1_biases, C1_m0_s,
            c1_out, C1_zero_points_out[0]);
-#if 0
+#if 1
     dump_tensor(6, 28, c1_out);
     exit(0);
 #endif
