@@ -108,15 +108,34 @@ void conv2d(int in_channels, int out_channels,
                 for (int m = 0; m < kernel_size; m++) {
                     for (int n = 0; n < kernel_size; n++) {
                         for (int i = 0; i < in_channels; i++) {
+                            int32_t kval = kernel[o][m][n][i];
+                            int32_t ival = input[k + m][l + n][i];
                             mac += kernel[o][m][n][i]
-                                    * (input[k + m][l + n][i] + input_zp);
+                                    * (input[k + m][l + n][i] - input_zp);
                         }
                     }
                 }
                 mac += bias[o];
-                mac = ((mac * m0_s[o].mult) >> m0_s[o].shift);
+                /* Compute high part of mult with rounding:
+                 * we need 64 bits, that sucks */
+                int64_t mh = (int64_t)mac * (int64_t)m0_s[o].mult;
+                int32_t rm = mh >= 0 ? (1 << 30) : (1 - (1 << 30));
+                rm = (mh + rm) / (1ll << 31);
+                /* Compute a rounding arithmetic right shift reverse-engineered
+                 * from tflite sources */
+                int32_t m = (1ll << m0_s[o].shift) - 1;
+                int32_t u = rm & m;
+                int32_t t = (m >> 1) + (rm < 0);
+                mac = (rm >> m0_s[o].shift) + (u > t); 
+                /* Add bias */
                 mac += output_zp;
-                output[k][l][o] = relu(mac);
+                /* Saturate result */
+                printf("%d, %d, %d: %d\n", o, l, k, mac);
+                mac = mac < -128 ? -128 : mac;
+                mac = mac > 127 ? 127 : mac;
+                printf("%d, %d, %d: %d\n", o, l, k, mac);
+                /* In tflite relu is done before maxpool */
+                output[k][l][o] = mac;
             }
         }
     }
@@ -185,13 +204,19 @@ void dense(int inputs,
 
 int main(int argc, char *argv[])
 {
-    int i = strtol(argv[1], NULL, 0);
+    int t = strtol(argv[1], NULL, 0);
 
-    int8_t c1_in[32][32];
+    int8_t c1_in[32][32][1];
+    /* Substract 128, that is what tflite does (in quantize layer ?) */
+    for (int i = 0; i < 32; i++) {
+        for (int j = 0; j < 32; j++) {
+            c1_in[i][j][0] = test_mnist[t][i][j][0] - 128;
+        }
+    }
     /* Input image 32x32, output image 28x28 */
     int8_t c1_out[28][28][6];
     conv2d(1, 6, 32, 5,
-           test_mnist[i], C1_zero_points_in[0],
+           c1_in, C1_zero_points_in[0],
            C1_kernels, C1_biases, C1_m0_s,
            c1_out, C1_zero_points_out[0]);
 #if 1
