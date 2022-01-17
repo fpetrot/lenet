@@ -73,7 +73,7 @@ static inline int8_t max(int8_t a, int8_t b)
 /* This just don't work, as all intermediate results are over 127 */
 static inline int8_t relu(int32_t a)
 {
-    return a < 0 ? 0 : a > 127 ? 127 : a;
+    return a < -128 ? 0 : a > 127 ? 127 : a;
 }
 
 /*
@@ -130,10 +130,8 @@ void conv2d(int in_channels, int out_channels,
                 /* Add bias */
                 mac += output_zp;
                 /* Saturate result */
-                printf("%d, %d, %d: %d\n", o, l, k, mac);
                 mac = mac < -128 ? -128 : mac;
                 mac = mac > 127 ? 127 : mac;
-                printf("%d, %d, %d: %d\n", o, l, k, mac);
                 /* In tflite relu is done before maxpool */
                 output[k][l][o] = mac;
             }
@@ -149,15 +147,16 @@ void maxpool(int channels,
                           [img_size / stride_size]
                           [channels])
 {
-    for (int i = 0; i < channels; i++) {
-        for (int j = 0; j < img_size; j += stride_size) {
-            for (int k = 0; k < img_size; k += stride_size) {
+    for (int j = 0; j < img_size; j += stride_size) {
+        for (int k = 0; k < img_size; k += stride_size) {
+            for (int i = 0; i < channels; i++) {
                 int8_t v = SCHAR_MIN;
                 for (int m = 0; m < stride_size; m++) {
                     for (int n = 0; n < stride_size; n++) {
                         v = max(v, input[j + m][k + n][i]);
                     }
                 }
+                printf("%d, %d, %d: %d\n", i, k/stride_size, j/stride_size, v);
                 output[j / stride_size][k / stride_size][i] = v;
             }
         }
@@ -219,13 +218,13 @@ int main(int argc, char *argv[])
            c1_in, C1_zero_points_in[0],
            C1_kernels, C1_biases, C1_m0_s,
            c1_out, C1_zero_points_out[0]);
-#if 1
+#if 0
     dump_tensor(6, 28, c1_out);
     exit(0);
 #endif
     int8_t s2_out[14][14][6];
     maxpool(6, 28, 2, c1_out, s2_out);
-#if 0
+#if 1
     dump_tensor(6, 14, s2_out);
     exit(0);
 #endif
