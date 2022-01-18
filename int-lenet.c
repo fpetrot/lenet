@@ -85,6 +85,21 @@ static inline int8_t relu(int32_t a)
  * tensors have a zero_point of zero.
  */
 
+static inline int32_t tflite_fixmul(int32_t mac, int32_8_t m0)
+{
+    /* Compute high part of mult with rounding:
+     * we need 64 bits, that sucks */
+    int64_t mh = (int64_t)mac * (int64_t)m0.mult;
+    int32_t rm = mh >= 0 ? (1 << 30) : (1 - (1 << 30));
+    rm = (mh + rm) / (1ll << 31);
+    /* Compute a rounding arithmetic right shift reverse-engineered
+     * from tflite sources */
+    int32_t m = (1ll << m0.shift) - 1;
+    int32_t u = rm & m;
+    int32_t t = (m >> 1) + (rm < 0);
+    return (rm >> m0.shift) + (u > t); 
+}
+
 /* FIXME: Handle padding as it should */
 /* C99 makes my day! */
 void conv2d(int in_channels, int out_channels,
@@ -116,17 +131,7 @@ void conv2d(int in_channels, int out_channels,
                     }
                 }
                 mac += bias[o];
-                /* Compute high part of mult with rounding:
-                 * we need 64 bits, that sucks */
-                int64_t mh = (int64_t)mac * (int64_t)m0_s[o].mult;
-                int32_t rm = mh >= 0 ? (1 << 30) : (1 - (1 << 30));
-                rm = (mh + rm) / (1ll << 31);
-                /* Compute a rounding arithmetic right shift reverse-engineered
-                 * from tflite sources */
-                int32_t m = (1ll << m0_s[o].shift) - 1;
-                int32_t u = rm & m;
-                int32_t t = (m >> 1) + (rm < 0);
-                mac = (rm >> m0_s[o].shift) + (u > t); 
+                mac = tflite_fixmul(mac, m0_s[o]);
                 /* Add bias */
                 mac += output_zp;
                 /* Saturate result */
@@ -156,7 +161,9 @@ void maxpool(int channels,
                         v = max(v, input[j + m][k + n][i]);
                     }
                 }
+#if 0
                 printf("%d, %d, %d: %d\n", i, k/stride_size, j/stride_size, v);
+#endif
                 output[j / stride_size][k / stride_size][i] = v;
             }
         }
@@ -192,12 +199,18 @@ void dense(int inputs,
     for (int j = 0; j < outputs; j ++) {
         int32_t mac = 0;
         for (int i = 0; i < inputs; i ++) {
-            mac += (input[i] + input_zp) * weight[j][i];
+            mac += (input[i] - input_zp) * weight[j][i];
         }
         mac += bias[j];
-        mac = (mac * m0_s.mult) >> m0_s.shift;
+        mac = tflite_fixmul(mac, m0_s);
         mac += output_zp;
-        output[j] = relu(mac);
+        /* Saturate result, seems to do what tflite relu does */
+        mac = mac < -128 ? -128 : mac;
+        mac = mac > 127 ? 127 : mac;
+#if 0
+        printf("%d: %d\n", j, mac);
+#endif
+        output[j] = mac;
     }
 }
 
@@ -224,7 +237,7 @@ int main(int argc, char *argv[])
 #endif
     int8_t s2_out[14][14][6];
     maxpool(6, 28, 2, c1_out, s2_out);
-#if 1
+#if 0
     dump_tensor(6, 14, s2_out);
     exit(0);
 #endif
@@ -279,13 +292,10 @@ int main(int argc, char *argv[])
     int8_t v = SCHAR_MIN;
     int rank = -1;
     for (int i = 0; i < sizeof(f7_out)/sizeof(*f7_out); i++) {
-        printf("%d ", f7_out[i]);
         if (v < f7_out[i]) {
             v = f7_out[i];
             rank = i;
-            printf(" hit!");
         }
-        printf("\n");
     }
     printf("got a %d\n", rank);
     return 0;
