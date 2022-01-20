@@ -92,12 +92,24 @@ static inline int32_t tflite_fixmul(int32_t mac, int32_8_t m0)
     int64_t mh = (int64_t)mac * (int64_t)m0.mult;
     int32_t rm = mh >= 0 ? (1 << 30) : (1 - (1 << 30));
     rm = (mh + rm) / (1ll << 31);
+#if 1
     /* Compute a rounding arithmetic right shift reverse-engineered
      * from tflite sources */
     int32_t m = (1ll << m0.shift) - 1;
     int32_t u = rm & m;
     int32_t t = (m >> 1) + (rm < 0);
     return (rm >> m0.shift) + (u > t); 
+#elif 0
+    /* sar */
+    int32_t s = -(rm < 0);
+    return (s ^ rm) >> m0.shift ^ s;
+#elif 0
+    /* div */
+    return rm >= 0 ? rm >> m0.shift : ~(~rm + 1 >> m0.shift) + 1;
+#else
+    /* flo */
+    return (rm + (1ll << (m0.shift - 1))) >> m0.shift;
+#endif
 }
 
 /* FIXME: Handle padding as it should */
@@ -292,7 +304,7 @@ int main(int argc, char *argv[])
     int8_t v = SCHAR_MIN;
     int rank = -1;
     for (int i = 0; i < sizeof(f7_out)/sizeof(*f7_out); i++) {
-        if (v < f7_out[i]) {
+        if (v <= f7_out[i]) {
             v = f7_out[i];
             rank = i;
         }
