@@ -70,12 +70,6 @@ static inline int8_t max(int8_t a, int8_t b)
     return a > b ? a : b;
 }
 
-/* This just don't work, as all intermediate results are over 127 */
-static inline int8_t relu(int32_t a)
-{
-    return a < -128 ? 0 : a > 127 ? 127 : a;
-}
-
 /*
  * There are several linear algebra tricks used by tensorflow lite when it
  * targets software, in particular it does not use the zero points in
@@ -142,9 +136,9 @@ void conv2d(int in_channels, int out_channels,
                         }
                     }
                 }
+                /* Add bias */
                 mac += bias[o];
                 mac = tflite_fixmul(mac, m0_s[o]);
-                /* Add bias */
                 mac += output_zp;
                 /* Saturate result */
                 mac = mac < -128 ? -128 : mac;
