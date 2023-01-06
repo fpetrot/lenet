@@ -168,7 +168,7 @@ int main(int argc, char *argv[])
     /* Input image 32x32, output image 28x28 */
     float c1_out[28][28][6];
     conv2d(1, 6, 32, 5, test_mnist[i], C1_kernels, C1_biases, c1_out);
-#if 1
+#if 0
     dump_tensor(6, 28, c1_out);
     exit(0);
 #endif
