@@ -1,5 +1,8 @@
 build-job:
   stage: build
+  artifacts:
+     paths:
+       - ./f
   script:
     - echo "Hello, $GITLAB_USER_LOGIN!"
     - gcc -O3 -std=c99 -o f float-lenet.c
