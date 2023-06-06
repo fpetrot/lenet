@@ -122,10 +122,11 @@ void conv2d(int in_channels, int out_channels,
 {
     int fm_size = img_size - 2 * (kernel_size / 2) + !(kernel_size & 1);
 
-    for (int k = 0; k < fm_size; k++) {
-        for (int l = 0; l < fm_size; l++) {
-            for (int o = 0; o < out_channels; o++) {
-                int32_t mac = 0;
+    for (int o = 0; o < out_channels; o++) {
+        for (int k = 0; k < fm_size; k++) {
+            for (int l = 0; l < fm_size; l++) {
+                /* Add bias */
+                int32_t mac = bias[o];
                 for (int m = 0; m < kernel_size; m++) {
                     for (int n = 0; n < kernel_size; n++) {
                         for (int i = 0; i < in_channels; i++) {
@@ -136,8 +137,6 @@ void conv2d(int in_channels, int out_channels,
                         }
                     }
                 }
-                /* Add bias */
-                mac += bias[o];
                 mac = tflite_fixmul(mac, m0_s[o]);
                 mac += output_zp;
                 /* Saturate result */
@@ -203,11 +202,11 @@ void dense(int inputs,
            int8_t output_zp)
 {
     for (int j = 0; j < outputs; j ++) {
-        int32_t mac = 0;
+        int32_t mac = bias[j];
         for (int i = 0; i < inputs; i ++) {
             mac += (input[i] - input_zp) * weight[j][i];
         }
-        mac += bias[j];
+
         mac = tflite_fixmul(mac, m0_s);
         mac += output_zp;
         /* Saturate result, seems to do what tflite relu does */

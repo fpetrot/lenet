@@ -89,9 +89,9 @@ void conv2d(int in_channels, int out_channels,
 {
     int fm_size = img_size - 2 * (kernel_size / 2) + !(kernel_size & 1);
 
-    for (int k = 0; k < fm_size; k++) {
-        for (int l = 0; l < fm_size; l++) {
-            for (int o = 0; o < out_channels; o++) {
+    for (int o = 0; o < out_channels; o++) {
+        for (int k = 0; k < fm_size; k++) {
+            for (int l = 0; l < fm_size; l++) {
                 float mac = 0;
                 for (int m = 0; m < kernel_size; m++) {
                     for (int n = 0; n < kernel_size; n++) {
