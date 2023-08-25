@@ -1,3 +1,10 @@
+/*
+ * Raw C implementation of Yann Lecun Lenet.
+ * float version that matches Tensorflow outputs.
+ * This is free software, use it at your own risk.
+ * 2020-2023 (c) Frédéric Pétrot
+ *               <frederic.petrot@univ-grenoble-alpes.fr>
+ */
 #include <inttypes.h>
 #include <stdbool.h>
 #include <assert.h>
