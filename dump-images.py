@@ -21,7 +21,7 @@ else:
 test_images = np.pad(array = test_images, pad_width = 2, mode = 'constant', constant_values = 0)
 # ca ajoute deux images vides devant et derrière, ...
 # on ne garde que les 8 premières images dans un premier temps
-test_images = test_images[0:10000]
+test_images = test_images[2:10002]
 # petite vérif qu'on récupère bien ce qu'il faut
 # np.set_printoptions(threshold = np.inf)
 # print(test_images)
