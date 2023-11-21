@@ -225,13 +225,10 @@ int main(int argc, char *argv[])
     float v = -FLT_MAX;
     int rank = -1;
     for (int i = 0; i < sizeof(f7_out)/sizeof(*f7_out); i++) {
-        printf("%g ", f7_out[i]);
         if (v < f7_out[i]) {
             v = f7_out[i];
             rank = i;
-            printf(" hit!");
         }
-        printf("\n");
     }
     printf("got a %d\n", rank);
     return 0;
