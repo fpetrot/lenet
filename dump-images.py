@@ -43,7 +43,9 @@ for l, j in enumerate(test_images):
     for i in j:
         s += '{'
         for v in i:
-            if rep == 'uint8_t':
+            if rep == 'int8_t':
+                u = "{:d}".format(v)
+            elif rep == 'uint8_t':
                 u = "0x{0:02x}".format(v)
             else:
                 u = "{:f}".format(v)
