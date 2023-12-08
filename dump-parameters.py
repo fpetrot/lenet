@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+# 2020-2023 (c) Frédéric Pétrot <frederic.petrot@univ-grenoble-alpes.fr>
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms and conditions of the GNU General Public License,
+# version 2 or later, as published by the Free Software Foundation.
+# 
+# This program is distributed in the hope it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+# more details.
+# 
+# You should have received a copy of the GNU General Public License along with
+# this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Dumping C arrays for the parameters learned in TensorFlow
+
 import logging
 logging.getLogger("tensorflow").setLevel(logging.DEBUG)
 
@@ -24,7 +40,7 @@ else:
     sys.exit(1)
 
 # Find a fixed point multiplication
-# Monkey-type translation from tensorflow gemmlowp pipeline
+# Monkey-style translation from tensorflow gemmlowp pipeline
 def mult_to_fix_shift(multiplicand):
     assert multiplicand > 0.0, "Multiplicand must be positive"
     assert multiplicand < 1.0, "Multiplicand must be strictly less than 1"
@@ -42,25 +58,17 @@ def mult_to_fix_shift(multiplicand):
         return m, rs
 
     return m, rs
-'''
-# récupération du data-set: i == image, l == label (catégorie)
-(_, _), (test_images, test_labels) = keras.datasets.mnist.load_data()
 
-# on passe de 28x28 en 32x32
-test_images = np.pad(array = test_images, pad_width = 2, mode = 'constant', constant_values = 0)
-test_images = np.expand_dims(test_images, axis=-1)
-test_images = test_images[2:test_images.shape[0] - 2]
-'''
-
+# Stuff learned using tf on lenet.py
 model_filename = f'lenet5_models/model_{rep}.tflite'
 interpreter = tf.lite.Interpreter(model_path = model_filename)
 interpreter.allocate_tensors()
 
-# Dump the whole content of a numpy array
+# Ensure dump of the whole content of a numpy array
 np.set_printoptions(threshold = np.inf)
 
 # Dumps the whole stuff in sequential order
-# For debug and understanding
+# For debug and understanding only, thus not executed in production mode
 if False:
     # Gives the tensors in what seems to be the correct order, alleluhia!
     ops = interpreter._get_ops_details()
@@ -96,7 +104,6 @@ if True:
         f.write('#include <inttypes.h>\n')
         f.write('typedef struct int32_8_t {\n  uint32_t mult;\n  uint8_t shift;\n} int32_8_t;\n')
 
-    # Gives the tensors in what seems to be the correct order, alleluhia!
     ops = interpreter._get_ops_details()
     for op in ops:
         t = ""
@@ -110,6 +117,7 @@ if True:
 
             wtype = ''
             layer_name = layer["name"].split('/')
+            # This matches the naming convention of my lenet C file
             if len(layer_name) > 1:
                 if layer_name[2] == 'Conv2D':
                     wtype = 'kernels'
@@ -159,6 +167,7 @@ if True:
         f.write(t)
     f.close()
 
+# From now on python code to ensure the model behaves as expected
 # Change this to test a different image
 test_image_index = 2
 

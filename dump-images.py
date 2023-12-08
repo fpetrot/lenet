@@ -1,5 +1,21 @@
 #!/usr/bin/env python
-# Construction d'un tableau C à partir d'images de data-sets
+# 2020-2023 (c) Frédéric Pétrot <frederic.petrot@univ-grenoble-alpes.fr>
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms and conditions of the GNU General Public License,
+# version 2 or later, as published by the Free Software Foundation.
+# 
+# This program is distributed in the hope it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+# more details.
+# 
+# You should have received a copy of the GNU General Public License along with
+# this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Building a C array from the original MNIST images 
+# Works only for the MNIST data set, but easilly expandable I suppose
+
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -17,29 +33,28 @@ else:
 
 (_, _), (test_images, test_labels) = keras.datasets.mnist.load_data()
 
-# on passe de 28x28 en 32x32
+# From 28x28 to 32x32 to avoid handling corner cases during NN evaluation
 test_images = np.pad(array = test_images, pad_width = 2, mode = 'constant', constant_values = 0)
-# ca ajoute deux images vides devant et derrière, ...
-# on ne garde que les 8 premières images dans un premier temps
+# Since this add 2 pictures before and after the figure, just skip them
 test_images = test_images[2:10002]
-# petite vérif qu'on récupère bien ce qu'il faut
+# Small check to make sure we got what we expected
 # np.set_printoptions(threshold = np.inf)
 # print(test_images)
 # sys.exit(0)
 
-# s doit être initialisée pour plus tard
+# s must be initialized to be used later
 s = ''
 
 if rep == 'uint8_t' or rep == 'int8_t':
     s += '#include <inttypes.h>\n'
 else:
     test_images = test_images.astype(float)
-    # si on veut normaliser entre 0 et 1, mais bon, on ne veut pas
+    # This would normalize between 0 and 1, but we don't want to do that
     # test_images = tf.image.convert_image_dtype(test_images, dtype=tf.float32, saturate=False)
 
 s += f'{rep}' + ' test_mnist[][32][32][1] = {'
 for l, j in enumerate(test_images):
-    s += '\n{' + f'// label: {test_labels[l]}\n'
+    s += '\n{' + f'// expected label: {test_labels[l]}\n'
     for i in j:
         s += '{'
         for v in i:
@@ -54,7 +69,9 @@ for l, j in enumerate(test_images):
     s += '},\n'
 s += '};\n'
 
-f = open(f'{rep}_images.h', 'wt')
+# Dump the data as a c file for separate compilation
+f = open(f'{rep}_images.c', 'wt')
 f.write(s)
 f.close()
-
+# Dump a header containing the type
+s = f'extern {rep}' + ' test_mnist[][32][32][1];'

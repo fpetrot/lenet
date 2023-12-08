@@ -1,10 +1,22 @@
 /*
  * Raw C implementation of Yann Lecun Lenet.
- * int8_t version to match Tensorflow Lite.
- * This is free software, use it at your own risk.
- * 2020-2023 (c) Frédéric Pétrot
- *               <frederic.petrot@univ-grenoble-alpes.fr>
+ * int8_t version that matches TensorFlow Lite outputs.
+ *
+ * 2020-2023 (c) Frédéric Pétrot <frederic.petrot@univ-grenoble-alpes.fr>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2 or later, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include <inttypes.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -78,12 +90,12 @@ static inline int8_t max(int8_t a, int8_t b)
 }
 
 /*
- * There are several linear algebra tricks used by tensorflow lite when it
+ * There are several linear algebra tricks used by TensorFlow Lite when it
  * targets software, in particular it does not use the zero points in
  * the inner-most loop, but for hw implementation, this is both simple and
  * fast, so let's go for it.
- * Note that by construction tflite guaranties for convolutions that the weights
- * tensors have a zero_point of zero.
+ * Note that by construction tflite guaranties for convolutions that the
+ * weights tensors have a zero_point of zero.
  */
 
 static inline int32_t tflite_fixmul(int32_t mac, int32_8_t m0)
@@ -132,13 +144,10 @@ void conv2d(int in_channels, int out_channels,
     for (int o = 0; o < out_channels; o++) {
         for (int k = 0; k < fm_size; k++) {
             for (int l = 0; l < fm_size; l++) {
-                /* Add bias */
                 int32_t mac = bias[o];
                 for (int m = 0; m < kernel_size; m++) {
                     for (int n = 0; n < kernel_size; n++) {
                         for (int i = 0; i < in_channels; i++) {
-                            int32_t kval = kernel[o][m][n][i];
-                            int32_t ival = input[k + m][l + n][i];
                             mac += kernel[o][m][n][i]
                                     * (input[k + m][l + n][i] - input_zp);
                         }
@@ -149,7 +158,6 @@ void conv2d(int in_channels, int out_channels,
                 /* Saturate result */
                 mac = mac < -128 ? -128 : mac;
                 mac = mac > 127 ? 127 : mac;
-                /* In tflite relu is done before maxpool */
                 output[k][l][o] = mac;
             }
         }

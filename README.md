@@ -1,6 +1,7 @@
 # Lenet in C99
 
 This piece of code has been developed to understand how tflite does its computations, in order for example to target hardware implementations.
+This work also had the side effect of understanding how the parameters are stored in TensorFlow output files.
 
 The relevant documentations that helped me to understand are:
 
