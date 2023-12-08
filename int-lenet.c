@@ -237,6 +237,8 @@ void dense(int inputs,
 
 int main(int argc, char *argv[])
 {
+    if (argc != 2)
+        return -1;
     int t = strtol(argv[1], NULL, 0);
 
     int8_t c1_in[32][32][1];

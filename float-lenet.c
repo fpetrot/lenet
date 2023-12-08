@@ -183,6 +183,8 @@ void dense(int inputs,
 
 int main(int argc, char *argv[])
 {
+    if (argc != 2)
+        return -1;
     int i = strtol(argv[1], NULL, 0);
 
     /* Input image 32x32, output image 28x28 */
