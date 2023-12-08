@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+
 # 2020-2023 (c) Frédéric Pétrot <frederic.petrot@univ-grenoble-alpes.fr>
+# SLS Team, TIMA Lab, Grenoble INP/UGA
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms and conditions of the GNU General Public License,
@@ -107,8 +109,11 @@ if True:
     ops = interpreter._get_ops_details()
     for op in ops:
         t = ""
+        # For some reason needed with tf 2.15.0 to avoid duplication
+        if op['op_name'] == 'SOFTMAX' :
+            break
         for input_idx, layer_idx in enumerate(op['inputs']):
-            layer = interpreter._get_tensor_details(layer_idx)
+            layer = interpreter._get_tensor_details(layer_idx,0)
             # Seems to me that some 'layers' are intermediate results not needed yet
             # Legacy for float
             if rep == 'float':
@@ -150,7 +155,7 @@ if True:
                 t += s + ';\n'
 
         if rep == 'int8_t' and (op['op_name'] == 'CONV_2D' or op['op_name'] == 'FULLY_CONNECTED'):
-            layer = interpreter._get_tensor_details(op['outputs'])
+            layer = interpreter._get_tensor_details(op['outputs'], 0)
             t += "/* Quantization parameters: Output[0]\n  " + str(layer['quantization_parameters']) + "\n */\n"
             # Dump scale as input_scale0 * input_scale1 / output_scale
             scales_out = layer['quantization_parameters']['scales']

@@ -3,6 +3,7 @@
  * int8_t version that matches TensorFlow Lite outputs.
  *
  * 2020-2023 (c) Frédéric Pétrot <frederic.petrot@univ-grenoble-alpes.fr>
+ * SLS Team, TIMA Lab, Grenoble INP/UGA
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
