@@ -6,7 +6,7 @@ This work also had the side effect of understanding how the parameters are store
 Python programs are used to generate the input images (MNIST data-set, not a surprise for Lenet) and dump the either float or int8 parameters.
 Note that this has been recently ported to TensorFlow 2.15.0 (adding one argument to `_get_tensors_details` and so expects (at least) this version of TensorFlow to work).
 
-However, for convenience since this python stuff is always a headache to setup, we also provide the generated files.
+However, for convenience since this python stuff is always a headache to setup, we also provide the generated files for the parameters and input images.
 
 
 The relevant documentations that helped me to understand are:
