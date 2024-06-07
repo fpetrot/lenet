@@ -35,3 +35,10 @@ diff 1.sar   1.div | grep -- '---' | wc -l => 0
 diff 1.sar   1.flo | grep -- '---' | wc -l => 11
 diff 1.div   1.flo | grep -- '---' | wc -l => 11
 ```
+
+# Lenet in C++
+
+Using the floatx.hpp header (`https://github.com/oprecomp/FloatX.git`), we can, given a templated C++ implementation, test with various floating-point representations.
+
+A kind of dirty hack first casts all parameters of the network and the imput image into the appropriate `floatx<y,z>`.
+Then we just apply the float functions, but templated.

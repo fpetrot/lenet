@@ -89,19 +89,20 @@ void dump_dense(T input)
 #endif
 }
 
-
-#if 0
+/*
+ * max is already defined for floats and doubles, so the definition clashes
+ * when used with fpnums
+ */
 template<typename T>
-static inline T max(T a, T b)
+static inline T fpmax(T a, T b)
 {
     return a > b ? a : b;
 }
-#endif
 
 template<typename T>
 static inline T relu(T a)
 {
-    return a < 0 ? 0 : a;
+    return a < T(0) ? T(0) : a;
 }
 
 /* FIXME: Handle padding as it should */
@@ -142,10 +143,10 @@ void maxpool(T input[img_size][img_size][channels],
     for (int i = 0; i < channels; i++) {
         for (int j = 0; j < img_size; j += stride_size) {
             for (int k = 0; k < img_size; k += stride_size) {
-                float v = -FLT_MAX;
+                T v = -FLT_MAX;
                 for (int m = 0; m < stride_size; m++) {
                     for (int n = 0; n < stride_size; n++) {
-                        v = max(v, input[j + m][k + n][i]);
+                        v = fpmax(v, input[j + m][k + n][i]);
                     }
                 }
                 output[j / stride_size][k / stride_size][i] = v;
@@ -182,14 +183,100 @@ void dense(T input[inputs],
     }
 }
 
+/*
+ * Not so great a way of doing it, but we're doing some quick hack, so
+ * let's live with it, ...
+ * Somehow this should be generated directly from tensorflow, btw.
+ */
 
-typedef float    fpnum;
-#if 0
 typedef fp16     fpnum;
+#if 0
+typedef float    fpnum;
 typedef bfloat16 fpnum;
 typedef fp8e5m2  fpnum;
 typedef fp8e4m3  fpnum;
 #endif
+
+/* Converted parameters */
+fpnum fp_C1_kernels[6][5][5][1];
+fpnum fp_C1_biases[6];
+fpnum fp_C3_kernels[16][5][5][6];
+fpnum fp_C3_biases[16];
+fpnum fp_F5_weights[120][400];
+fpnum fp_F5_biases[120];
+fpnum fp_F6_weights[84][120];
+fpnum fp_F6_biases[84];
+fpnum fp_F7_weights[10][84];
+fpnum fp_F7_biases[10];
+/* Converted image */
+fpnum fp_test_mnist[32][32][1];
+
+template<typename T>
+void float2fp(int n) 
+{
+    int i, j, k, l;
+
+    /* Convert float input into fpnum */
+    for (i = 0; i < 31; i++) {
+        for (j = 0; j < 31; j++) {
+            fp_test_mnist[i][j][0] = T(test_mnist[n][i][j][0]);
+        }
+    }
+
+    /* Convert parameters int fpnum */
+    for (i = 0; i < 6; i++) {
+        for (j = 0; j < 5; j++) {
+            for (k = 0; k < 5; k++) {
+                for (l = 0; l < 1; l++) {
+                    fp_C1_kernels[i][j][k][l] = T(C1_kernels[i][j][k][l]);
+                }
+            }
+        }
+    }
+    for (i = 0; i < 6; i++) {
+        fp_C1_biases[i] = T(fp_C1_biases[i]);
+    }
+
+    for (i = 0; i < 16; i++) {
+        for (j = 0; j < 5; j++) {
+            for (k = 0; k < 5; k++) {
+                for (l = 0; l < 6; l++) {
+                    fp_C3_kernels[i][j][k][l] = T(C3_kernels[i][j][k][l]);
+                }
+            }
+        }
+    }
+    for (i = 0; i < 6; i++) {
+        fp_C3_biases[i] = T(fp_C3_biases[i]);
+    }
+
+    for (i = 0; i < 120; i++) {
+        for (j = 0; j < 400; j++) {
+            fp_F5_weights[i][j] = T(F5_weights[i][j]);
+        }
+    }
+    for (i = 0; i < 120; i++) {
+        fp_F5_biases[i] = T(fp_F5_biases[i]);
+    }
+
+    for (i = 0; i < 84; i++) {
+        for (j = 0; j < 120; j++) {
+            fp_F6_weights[i][j] = T(F6_weights[i][j]);
+        }
+    }
+    for (i = 0; i < 84; i++) {
+        fp_F6_biases[i] = T(fp_F6_biases[i]);
+    }
+
+    for (i = 0; i < 10; i++) {
+        for (j = 0; j < 84; j++) {
+            fp_F7_weights[i][j] = T(F7_weights[i][j]);
+        }
+    }
+    for (i = 0; i < 10; i++) {
+        fp_F7_biases[i] = T(fp_F7_biases[i]);
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -197,18 +284,12 @@ int main(int argc, char *argv[])
         return -1;
     int i = strtol(argv[1], NULL, 0);
 
-    /* Convert float input into fpnum */
-    fpnum fp_test_mnist[32][32][1];
-
-    for (int j = 0; j < 31; j++) {
-        for (int k = 0; k < 31; k++) {
-            fp_test_mnist[j][k][0] = fpnum(test_mnist[i][j][k][0]);
-        }
-    }
+    /* Convert all network parameters to the proper type, and image i too */
+    float2fp<fpnum>(i);
 
     /* Input image 32x32, output image 28x28 */
     fpnum c1_out[28][28][6];
-    conv2d<fpnum, 1, 6, 32, 5>(fp_test_mnist, C1_kernels, C1_biases, c1_out);
+    conv2d<fpnum, 1, 6, 32, 5>(fp_test_mnist, fp_C1_kernels, fp_C1_biases, c1_out);
 #if 0
     dump_tensor<fpnum, 6, 28>(c1_out);
     exit(0);
@@ -220,7 +301,7 @@ int main(int argc, char *argv[])
     exit(0);
 #endif
     fpnum c3_out[10][10][16];
-    conv2d<fpnum, 6, 16, 14, 5>(s2_out, C3_kernels, C3_biases, c3_out);
+    conv2d<fpnum, 6, 16, 14, 5>(s2_out, fp_C3_kernels, fp_C3_biases, c3_out);
 #if 0
     dump_tensor<fpnum, 16, 10>(c3_out);
     exit(0);
@@ -238,19 +319,19 @@ int main(int argc, char *argv[])
     exit(0);
 #endif
     fpnum f5_out[120];
-    dense<fpnum, 400, 120>(r_out, F5_weights, F5_biases, f5_out);
+    dense<fpnum, 400, 120>(r_out, fp_F5_weights, fp_F5_biases, f5_out);
 #if 0
     dump_dense<fpnum, 120>(f5_out);
     exit(0);
 #endif
     fpnum f6_out[84];
-    dense<fpnum, 120, 84>(f5_out, F6_weights, F6_biases, f6_out);
+    dense<fpnum, 120, 84>(f5_out, fp_F6_weights, fp_F6_biases, f6_out);
 #if 0
     dump_dense<fpnum, 84>(f6_out);
     exit(0);
 #endif
     fpnum f7_out[10];
-    dense<fpnum, 84, 10>(f6_out, F7_weights, F7_biases, f7_out);
+    dense<fpnum, 84, 10>(f6_out, fp_F7_weights, fp_F7_biases, f7_out);
 #if 0
     dump_dense(10, f7_out);
     exit(0);
@@ -258,7 +339,7 @@ int main(int argc, char *argv[])
 
     fpnum v = -FLT_MAX;
     int rank = -1;
-    for (size_t i = 0; i < sizeof(f7_out)/sizeof(*f7_out); i++) {
+    for (size_t i = 0; i < sizeof f7_out/sizeof *f7_out; i++) {
         if (v < f7_out[i]) {
             v = f7_out[i];
             rank = i;
