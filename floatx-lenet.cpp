@@ -28,7 +28,7 @@
 using namespace std;
 
 typedef flx::floatx<5,10> fp16;
-typedef flx::floatx<5,10> bfloat16;
+typedef flx::floatx<8,7> bfloat16;
 typedef flx::floatx<5,2> fp8e5m2;
 typedef flx::floatx<4,3> fp8e4m3;
 
@@ -143,10 +143,10 @@ void maxpool(T input[img_size][img_size][channels],
     for (int i = 0; i < channels; i++) {
         for (int j = 0; j < img_size; j += stride_size) {
             for (int k = 0; k < img_size; k += stride_size) {
-                T v = -FLT_MAX;
+                float v = -FLT_MAX;
                 for (int m = 0; m < stride_size; m++) {
                     for (int n = 0; n < stride_size; n++) {
-                        v = fpmax(v, input[j + m][k + n][i]);
+                        v = fpmax(v, (float)input[j + m][k + n][i]);
                     }
                 }
                 output[j / stride_size][k / stride_size][i] = v;
@@ -188,14 +188,16 @@ void dense(T input[inputs],
  * let's live with it, ...
  * Somehow this should be generated directly from tensorflow, btw.
  */
-
-typedef fp16     fpnum;
-#if 0
-typedef float    fpnum;
-typedef bfloat16 fpnum;
-typedef fp8e5m2  fpnum;
-typedef fp8e4m3  fpnum;
+#if FPNUM != float \
+    && FPNUM != double \
+    && FPNUM != fp16 \
+    && FPNUM != bfloat16 \
+    && FPNUM != fp8e4m3 \
+    && FPNUM != fp8e5m2
+#warning "FPNUM macro does not have a predefined supported type\n" \
+         "Continuing with custom type, crossing fingers !"
 #endif
+typedef FPNUM fpnum;
 
 /* Converted parameters */
 fpnum fp_C1_kernels[6][5][5][1];
@@ -209,21 +211,30 @@ fpnum fp_F6_biases[84];
 fpnum fp_F7_weights[10][84];
 fpnum fp_F7_biases[10];
 /* Converted image */
-fpnum fp_test_mnist[32][32][1];
+fpnum fp_test_mnist[10000][32][32][1];
 
 template<typename T>
-void float2fp(int n) 
+void float2fp_images(int s) 
+{
+    int i, j, n;
+
+    /* Convert float input into fpnum */
+    for (n = 0; n < 10000; n++) {
+        for (i = 0; i < 31; i++) {
+            for (j = 0; j < 31; j++) {
+                /* Lets normalize in some way to avoid overflows */
+                fp_test_mnist[n][i][j][0] = T(test_mnist[n][i][j][0]/(float)s);
+            }
+        }
+    }
+}
+
+template<typename T>
+void float2fp_parameters(void) 
 {
     int i, j, k, l;
 
-    /* Convert float input into fpnum */
-    for (i = 0; i < 31; i++) {
-        for (j = 0; j < 31; j++) {
-            fp_test_mnist[i][j][0] = T(test_mnist[n][i][j][0]);
-        }
-    }
-
-    /* Convert parameters int fpnum */
+    /* Convert parameters int fpnum : leaning produces ]-1, +1[ real values */
     for (i = 0; i < 6; i++) {
         for (j = 0; j < 5; j++) {
             for (k = 0; k < 5; k++) {
@@ -282,69 +293,72 @@ int main(int argc, char *argv[])
 {
     if (argc != 2)
         return -1;
-    int i = strtol(argv[1], NULL, 0);
+    int s = strtol(argv[1], NULL, 0);
 
     /* Convert all network parameters to the proper type, and image i too */
-    float2fp<fpnum>(i);
+    float2fp_parameters<fpnum>();
+    float2fp_images<fpnum>(s);
 
-    /* Input image 32x32, output image 28x28 */
-    fpnum c1_out[28][28][6];
-    conv2d<fpnum, 1, 6, 32, 5>(fp_test_mnist, fp_C1_kernels, fp_C1_biases, c1_out);
+    for (int i = 0; i < 10000; i++) {
+        /* Input image 32x32, output image 28x28 */
+        fpnum c1_out[28][28][6];
+        conv2d<fpnum, 1, 6, 32, 5>(fp_test_mnist[i], fp_C1_kernels, fp_C1_biases, c1_out);
 #if 0
-    dump_tensor<fpnum, 6, 28>(c1_out);
-    exit(0);
+        dump_tensor<fpnum, 6, 28>(c1_out);
+        exit(0);
 #endif
-    fpnum s2_out[14][14][6];
-    maxpool<fpnum, 6, 28, 2>(c1_out, s2_out);
+        fpnum s2_out[14][14][6];
+        maxpool<fpnum, 6, 28, 2>(c1_out, s2_out);
 #if 0
-    dump_tensor<fpnum, 6, 14>(s2_out);
-    exit(0);
+        dump_tensor<fpnum, 6, 14>(s2_out);
+        exit(0);
 #endif
-    fpnum c3_out[10][10][16];
-    conv2d<fpnum, 6, 16, 14, 5>(s2_out, fp_C3_kernels, fp_C3_biases, c3_out);
+        fpnum c3_out[10][10][16];
+        conv2d<fpnum, 6, 16, 14, 5>(s2_out, fp_C3_kernels, fp_C3_biases, c3_out);
 #if 0
-    dump_tensor<fpnum, 16, 10>(c3_out);
-    exit(0);
+        dump_tensor<fpnum, 16, 10>(c3_out);
+        exit(0);
 #endif
-    fpnum s4_out[5][5][16];
-    maxpool<fpnum, 16, 10, 2>(c3_out, s4_out);
+        fpnum s4_out[5][5][16];
+        maxpool<fpnum, 16, 10, 2>(c3_out, s4_out);
 #if 0
-    dump_tensor<fpnum, 16, 5>(s4_out);
-    exit(0);
+        dump_tensor<fpnum, 16, 5>(s4_out);
+        exit(0);
 #endif
-    fpnum r_out[400];
-    reshape<fpnum, 16, 5, 1>(s4_out, r_out);
+        fpnum r_out[400];
+        reshape<fpnum, 16, 5, 1>(s4_out, r_out);
 #if 0
-    dump_dense<fpnum, 400>(r_out);
-    exit(0);
+        dump_dense<fpnum, 400>(r_out);
+        exit(0);
 #endif
-    fpnum f5_out[120];
-    dense<fpnum, 400, 120>(r_out, fp_F5_weights, fp_F5_biases, f5_out);
+        fpnum f5_out[120];
+        dense<fpnum, 400, 120>(r_out, fp_F5_weights, fp_F5_biases, f5_out);
 #if 0
-    dump_dense<fpnum, 120>(f5_out);
-    exit(0);
+        dump_dense<fpnum, 120>(f5_out);
+        exit(0);
 #endif
-    fpnum f6_out[84];
-    dense<fpnum, 120, 84>(f5_out, fp_F6_weights, fp_F6_biases, f6_out);
+        fpnum f6_out[84];
+        dense<fpnum, 120, 84>(f5_out, fp_F6_weights, fp_F6_biases, f6_out);
 #if 0
-    dump_dense<fpnum, 84>(f6_out);
-    exit(0);
+        dump_dense<fpnum, 84>(f6_out);
+        exit(0);
 #endif
-    fpnum f7_out[10];
-    dense<fpnum, 84, 10>(f6_out, fp_F7_weights, fp_F7_biases, f7_out);
+        fpnum f7_out[10];
+        dense<fpnum, 84, 10>(f6_out, fp_F7_weights, fp_F7_biases, f7_out);
 #if 0
-    dump_dense(10, f7_out);
-    exit(0);
+        dump_dense(10, f7_out);
+        exit(0);
 #endif
 
-    fpnum v = -FLT_MAX;
-    int rank = -1;
-    for (size_t i = 0; i < sizeof f7_out/sizeof *f7_out; i++) {
-        if (v < f7_out[i]) {
-            v = f7_out[i];
-            rank = i;
+        fpnum v = -FLT_MAX;
+        int rank = -1;
+        for (size_t i = 0; i < sizeof f7_out/sizeof *f7_out; i++) {
+            if (v < f7_out[i]) {
+                v = f7_out[i];
+                rank = i;
+            }
         }
+        cout << "got a " << rank << endl;
     }
-    cout << "got a " << rank << endl;
     return 0;
 }
