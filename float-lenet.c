@@ -173,6 +173,7 @@ void dense(int inputs,
            float output[outputs])
 {
     for (int j = 0; j < outputs; j ++) {
+        output[j] = 0;
         for (int i = 0; i < inputs; i ++) {
             output[j] += input[i] * weight[j][i];
         }
@@ -239,7 +240,7 @@ int main(int argc, char *argv[])
 
     float v = -FLT_MAX;
     int rank = -1;
-    for (int i = 0; i < sizeof(f7_out)/sizeof(*f7_out); i++) {
+    for (int i = 0; i < sizeof f7_out/sizeof *f7_out; i++) {
         if (v < f7_out[i]) {
             v = f7_out[i];
             rank = i;

@@ -176,6 +176,7 @@ void dense(T input[inputs],
            T output[outputs])
 {
     for (int j = 0; j < outputs; j ++) {
+        output[j] = 0;
         for (int i = 0; i < inputs; i ++) {
             output[j] += input[i] * weight[j][i];
         }
