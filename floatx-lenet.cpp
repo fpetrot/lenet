@@ -120,7 +120,7 @@ void conv2d(T input[img_size][img_size][in_channels],
     for (int o = 0; o < out_channels; o++) {
         for (int k = 0; k < fm_size; k++) {
             for (int l = 0; l < fm_size; l++) {
-                float mac = 0;
+                T mac = 0;
                 for (int m = 0; m < kernel_size; m++) {
                     for (int n = 0; n < kernel_size; n++) {
                         for (int i = 0; i < in_channels; i++) {
@@ -143,10 +143,10 @@ void maxpool(T input[img_size][img_size][channels],
     for (int i = 0; i < channels; i++) {
         for (int j = 0; j < img_size; j += stride_size) {
             for (int k = 0; k < img_size; k += stride_size) {
-                float v = -FLT_MAX;
+                T v = -FLT_MAX;
                 for (int m = 0; m < stride_size; m++) {
                     for (int n = 0; n < stride_size; n++) {
-                        v = fpmax(v, (float)input[j + m][k + n][i]);
+                        v = fpmax(v, input[j + m][k + n][i]);
                     }
                 }
                 output[j / stride_size][k / stride_size][i] = v;
@@ -176,6 +176,7 @@ void dense(T input[inputs],
            T output[outputs])
 {
     for (int j = 0; j < outputs; j ++) {
+        output[j] = 0;
         for (int i = 0; i < inputs; i ++) {
             output[j] += input[i] * weight[j][i];
         }
