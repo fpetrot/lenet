@@ -12,9 +12,10 @@ DEFFP ?= float
 %.c: %.c.gz
 	$(GUNZIP) -c $< > $@
 
-all : int-lenet float-lenet floatx-lenet
+all : int-lenet float-lenet floatx-lenet all-int-lenet
 
 int-lenet: int-lenet.o int8_t_images.o
+all-int-lenet: all-int-lenet.o int8_t_images.o
 float-lenet: float-lenet.o float_images.o
 floatx-lenet: floatx-lenet.o float_images.o
 	$(CXX) -o $@ $^
